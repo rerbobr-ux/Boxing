@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>БОКС И КАЧАЛКА VR — Meta Quest 2/3 & Desktop</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Inter:wght@400;600;700&display=swap');
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0d10;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-sport {
+            font-family: 'Oswald', sans-serif;
+            letter-spacing: 0.04em;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 18, 24, 0.8); }
+        ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 3px; }
+    </style>
+</head>
+<body class="text-slate-100">
+
+    <!-- WebGL / WebXR Canvas -->
+    <div id="canvas-container" class="fixed inset-0 z-0"></div>
+
+    <!-- Top Header & VR Launch Bar -->
+    <div class="fixed top-0 left-0 right-0 z-20 p-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <div class="flex items-center gap-3 bg-slate-900/90 border border-red-600/50 backdrop-blur-md px-4 py-2 rounded-xl shadow-xl pointer-events-auto">
+            <span class="text-2xl">🥊</span>
+            <div>
+                <h1 class="font-sport text-base sm:text-lg font-bold text-red-500 uppercase leading-none">ЖЕЛЕЗНЫЙ РИНГ VR</h1>
+                <p id="zone-indicator" class="text-xs text-slate-400 mt-0.5">Зона: Тренажёрный зал</p>
+            </div>
+        </div>
+
+        <!-- Bicep Pump Progress Pill (Always visible in Gym & Ring!) -->
+        <div class="flex items-center gap-3 bg-slate-900/90 border border-amber-500/40 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-xl pointer-events-auto">
+            <span class="text-xl">💪</span>
+            <div class="w-32 sm:w-44">
+                <div class="flex justify-between text-[11px] font-bold mb-1">
+                    <span class="text-amber-400">БИЦЕПС</span>
+                    <span id="bicep-pct-label" class="text-slate-200">0% (Норма)</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="bicep-bar" class="h-full bg-gradient-to-r from-amber-500 to-red-500 transition-all duration-150" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VR Button & Menu Toggle -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="btn-toggle-panel" class="px-3 py-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-semibold shadow-lg transition">
+                Скрыть панель
+            </button>
+            <div id="vr-btn-container"></div>
+        </div>
+    </div>
+
+    <!-- Fight HUD (Shown when in Boxing Ring match) -->
+    <div id="fight-hud" class="hidden fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-20 w-[94%] max-w-2xl bg-slate-950/90 border border-red-600/50 backdrop-blur-md rounded-2xl p-3 shadow-2xl pointer-events-auto">
+        <div class="grid grid-cols-3 items-center gap-3">
+            <!-- Player Bars -->
+            <div>
+                <div class="flex justify-between text-xs font-bold mb-1">
+                    <span class="text-sky-400">ВЫ</span>
+                    <span id="hud-player-hp">100</span>
+                </div>
+                <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="hud-player-hp-bar" class="h-full bg-gradient-to-r from-sky-600 to-cyan-400 transition-all duration-100" style="width: 100%;"></div>
+                </div>
+                <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
+                    <div id="hud-player-stam-bar" class="h-full bg-amber-400 transition-all duration-75" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <!-- Round & Timer -->
+            <div class="text-center border-x border-slate-800 px-2">
+                <div id="hud-round" class="font-sport text-xs sm:text-sm font-bold text-amber-400 uppercase">РАУНД 1 / 3</div>
+                <div id="hud-timer" class="font-sport text-xl sm:text-2xl font-bold text-white leading-tight">01:30</div>
+                <button id="btn-leave-ring" class="mt-1 px-2.5 py-0.5 bg-slate-800 hover:bg-red-700 text-[11px] rounded border border-slate-600 transition">
+                    Выйти в зал
+                </button>
+            </div>
+
+            <!-- Opponent Bars -->
+            <div>
+                <div class="flex justify-between text-xs font-bold mb-1">
+                    <span id="hud-enemy-name" class="text-red-400 truncate">СОПЕРНИК</span>
+                    <span id="hud-enemy-hp">100</span>
+                </div>
+                <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="hud-enemy-hp-bar" class="h-full bg-gradient-to-r from-red-700 to-red-500 transition-all duration-100" style="width: 100%;"></div>
+                </div>
+                <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
+                    <div id="hud-enemy-stam-bar" class="h-full bg-orange-400 transition-all duration-75" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Knockdown / Match Result Banner -->
+    <div id="ring-overlay-banner" class="hidden fixed inset-0 z-30 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border-2 border-red-500 rounded-2xl p-6 max-w-md w-full text-center shadow-2xl space-y-4">
+            <h2 id="banner-title" class="font-sport text-3xl font-bold text-amber-400 uppercase">НОКДАУН!</h2>
+            <p id="banner-subtitle" class="text-sm text-slate-300">Счёт: 1... 2... 3...</p>
+            <div id="banner-actions" class="hidden flex gap-3 justify-center pt-2">
+                <button id="btn-rematch" class="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm transition">
+                    🔄 Реванш
+                </button>
+                <button id="btn-back-gym" class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-sm transition">
+                    🏋️ В качалку
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Left Control Panel: Gym Navigation, Kettlebell, Bags & Ring Matches -->
+    <div id="side-panel" class="fixed bottom-3 left-3 right-3 sm:right-auto sm:top-20 sm:bottom-4 sm:w-88 max-w-sm z-20 bg-slate-900/92 border border-slate-700/80 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[58vh] sm:max-h-none transition-all duration-200">
+        
+        <!-- Quick Teleport / Zone Buttons -->
+        <div class="p-3 bg-slate-950/70 border-b border-slate-800 shrink-0">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Быстрый переход по залу</div>
+            <div class="grid grid-cols-3 gap-1.5">
+                <button id="tp-kettlebell" class="py-2 px-2 bg-amber-600/90 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow transition">
+                    🏋️ Гиря
+                </button>
+                <button id="tp-bags" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 rounded-xl text-xs font-bold transition">
+                    🥊 Груши
+                </button>
+                <button id="tp-ring" class="py-2 px-2 bg-red-700/90 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow transition">
+                    🏟️ На ринг
+                </button>
+            </div>
+        </div>
+
+        <div class="p-3.5 overflow-y-auto space-y-4 flex-1">
+            <!-- Kettlebell Pumping Card -->
+            <div class="bg-slate-800/60 border border-amber-500/30 rounded-xl p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-sport text-sm font-bold text-amber-400 uppercase">🏋️ Качалка: Гиря 24 кг</span>
+                    <span id="reps-counter" class="text-xs font-mono text-slate-300">Повторов: 0</span>
+                </div>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    Качай гирю по приколу — бицепс на руках реально растёт на глазах (до лимита 100%)!
+                </p>
+                <button id="btn-pump-kb" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 active:scale-95 text-white font-bold rounded-xl text-xs shadow-lg transition">
+                    💪 Поднять гирю (Клавиша F / Grip в VR)
+                </button>
+                <div id="bicep-limit-msg" class="hidden text-[11px] text-center font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 rounded-lg py-1">
+                    🔥 ЛИМИТ БИЦЕПСА ДОСТИГНУТ! Банки максимальные!
+                </div>
+            </div>
+
+            <!-- Boxing Match Setup -->
+            <div class="bg-slate-800/60 border border-red-500/30 rounded-xl p-3 space-y-2.5">
+                <div class="font-sport text-sm font-bold text-red-400 uppercase">🥊 Бой на ринге (3 раунда)</div>
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">Выбор соперника</label>
+                    <select id="opponent-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white">
+                        <option value="rookie">1. Новичок Саня (Лёгкий спарринг)</option>
+                        <option value="pro">2. Разрядник Виктор (Джебы и серии)</option>
+                        <option value="champ">3. Чемпион Молот (Жёсткие хуки и защита)</option>
+                    </select>
+                </div>
+                <button id="btn-start-fight" class="w-full py-2.5 bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 active:scale-95 text-white font-bold rounded-xl text-xs shadow-lg border border-red-400/40 transition">
+                    🔔 НАЧАТЬ БОЙ НА РИНГЕ
+                </button>
+            </div>
+
+            <!-- Punch Technique Guide -->
+            <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-1.5 text-[11px]">
+                <div class="font-bold text-slate-200">🎯 Арсенал ударов (VR и ПК):</div>
+                <div class="flex justify-between text-slate-300"><span>• <b>Джеб / Кросс:</b> Прямой удар (ЛКМ / 1-2)</span><span class="text-sky-400">Быстро</span></div>
+                <div class="flex justify-between text-slate-300"><span>• <b>Хук:</b> Боковой с размаха (Q / E)</span><span class="text-amber-400">Обходит блок</span></div>
+                <div class="flex justify-between text-slate-300"><span>• <b>Апперкот:</b> Снизу вверх (R / ПКМ)</span><span class="text-red-400">Пробивает защиту</span></div>
+                <div class="flex justify-between text-slate-300"><span>• <b>Блок и Уклоны:</b> Перчатки у лица (Пробел / A-D)</span><span class="text-emerald-400">-80% урона</span></div>
+            </div>
+        </div>
+
+        <div class="px-3 py-2 bg-slate-950 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between shrink-0">
+            <span>ПК: WASD, ЛКМ, Q/E, R, Пробел</span>
+            <span>Quest: Стики, Grip, Удары руками</span>
+        </div>
+    </div>
+
+    <!-- Desktop On-Screen Boxing Pad (Convenient for testing & mobile/touch) -->
+    <div id="desktop-punch-pad" class="fixed bottom-3 right-3 z-20 flex flex-col gap-1.5 bg-slate-900/85 border border-slate-700/80 backdrop-blur-md p-2.5 rounded-2xl shadow-2xl">
+        <div class="grid grid-cols-2 gap-1.5">
+            <button data-punch="jab" class="punch-btn px-3 py-2.5 bg-sky-700 hover:bg-sky-600 active:scale-95 rounded-xl text-xs font-bold shadow">
+                👊 Джеб (ЛКМ)
+            </button>
+            <button data-punch="cross" class="punch-btn px-3 py-2.5 bg-blue-700 hover:bg-blue-600 active:scale-95 rounded-xl text-xs font-bold shadow">
+                💥 Кросс (C)
+            </button>
+            <button data-punch="hookL" class="punch-btn px-3 py-2.5 bg-amber-700 hover:bg-amber-600 active:scale-95 rounded-xl text-xs font-bold shadow">
+                ↪️ Лев. Хук (Q)
+            </button>
+            <button data-punch="hookR" class="punch-btn px-3 py-2.5 bg-orange-700 hover:bg-orange-600 active:scale-95 rounded-xl text-xs font-bold shadow">
+                ↩️ Прав. Хук (E)
+            </button>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+            <button data-punch="uppercut" class="punch-btn px-3 py-2.5 bg-red-700 hover:bg-red-600 active:scale-95 rounded-xl text-xs font-bold shadow">
+                ⬆️ Апперкот (R)
+            </button>
+            <button id="btn-hold-block" class="px-3 py-2.5 bg-emerald-800 hover:bg-emerald-700 active:scale-95 rounded-xl text-xs font-bold border border-emerald-400/40 shadow">
+                🛡️ Блок (Пробел)
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-0 translate-y-2 transition-all duration-200">
+        <div id="toast-msg" class="bg-slate-900/95 border border-amber-400 text-amber-200 px-5 py-2 rounded-xl shadow-2xl font-sport text-base tracking-wide uppercase">
+            ДЖЕБ!
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+        // ============================================================================
+        // 1. PROCEDURAL WEB AUDIO SYNTHESIZER (BOXING GLOVES, BELL, KETTLEBELL)
+        // ============================================================================
+        class BoxingAudio {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playPunchImpact(power = 1.0, isBag = false) {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+
+                // Low leather thud
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                const startFreq = isBag ? (115 - power * 15) : (150 - power * 20);
+                osc.frequency.setValueAtTime(Math.max(55, startFreq), now);
+                osc.frequency.exponentialRampToValueAtTime(28, now + 0.16);
+
+                gain.gain.setValueAtTime(Math.min(0.45, 0.22 * power), now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.19);
+
+                // Crisp leather slap noise
+                const bufSize = Math.floor(this.ctx.sampleRate * 0.08);
+                const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+                const data = buf.getChannelData(0);
+                for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buf;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = isBag ? 650 : 950;
+
+                const nGain = this.ctx.createGain();
+                nGain.gain.setValueAtTime(0.25 * power, now);
+                nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+                noise.connect(filter);
+                filter.connect(nGain);
+                nGain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+            playSpeedBagPop() {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(340, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.07);
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+            playBlock() {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(190, now);
+                osc.frequency.exponentialRampToValueAtTime(75, now + 0.11);
+                gain.gain.setValueAtTime(0.28, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+            playKettlebellClank() {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [520, 780, 1290].forEach((f, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(f, now);
+                    gain.gain.setValueAtTime(0.12 / (idx + 1), now);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.36);
+                });
+            }
+            playRingBell(rings = 1) {
+                this.init();
+                if (!this.ctx) return;
+                for (let r = 0; r < rings; r++) {
+                    const start = this.ctx.currentTime + r * 0.38;
+                    [920, 1380, 2110].forEach((freq, i) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, start);
+                        gain.gain.setValueAtTime(0.22 / (i + 1), start);
+                        gain.gain.exponentialRampToValueAtTime(0.0005, start + 1.1);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(start);
+                        osc.stop(start + 1.15);
+                    });
+                }
+            }
+        }
+        const sfx = new BoxingAudio();
+
+        // ============================================================================
+        // 2. GAME STATE & CONFIGURATION
+        // ============================================================================
+        const OPPONENTS = {
+            rookie: { name: 'Новичок Саня', hp: 110, speed: 1.5, damage: 9, guardChance: 0.25, color: 0x3b82f6, shorts: 0x1d4ed8 },
+            pro:    { name: 'Разрядник Виктор', hp: 150, speed: 1.9, damage: 13, guardChance: 0.45, color: 0xf59e0b, shorts: 0xb45309 },
+            champ:  { name: 'Чемпион Молот', hp: 210, speed: 2.25, damage: 18, guardChance: 0.65, color: 0xdc2626, shorts: 0x111827 }
+        };
+
+        const state = {
+            // Bicep Pump System (For fun, capped at 100%)
+            bicepLevel: 0.0, // 0.0 to 1.0 (100% cap)
+            kettlebellReps: 0,
+            kettlebellHeld: false,
+            kbPumpAnim: 0,
+
+            // Player State
+            player: {
+                hp: 100,
+                maxHp: 100,
+                stamina: 100,
+                maxStamina: 100,
+                isBlocking: false,
+                invulnTimer: 0,
+                leftPunchAnim: 0,
+                rightPunchAnim: 0,
+                activePunchType: 'jab'
+            },
+
+            // Ring Match State
+            matchActive: false,
+            round: 1,
+            maxRounds: 3,
+            roundTime: 90,
+            knockdownActive: false,
+            knockdownCount: 0,
+            knockdownTarget: null // 'player' | 'enemy'
+        };
+
+        // ============================================================================
+        // 3. THREE.JS SCENE, RENDERER & WEBXR SETUP
+        // ============================================================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111318);
+        scene.fog = new THREE.FogExp2(0x111318, 0.022);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 80);
+
+        // Player Rig for VR & Desktop Locomotion
+        const playerRig = new THREE.Group();
+        // Start right in front of the Kettlebell & Punching Bags in the Gym!
+        playerRig.position.set(-4.2, 0, 2.2);
+        scene.add(playerRig);
+
+        camera.position.set(0, 1.65, 0);
+        playerRig.add(camera);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.xr.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        // WebXR Button for Meta Quest 2 / 3
+        const vrBtn = VRButton.createButton(renderer);
+        vrBtn.style.position = 'static';
+        vrBtn.style.padding = '8px 14px';
+        vrBtn.style.borderRadius = '12px';
+        vrBtn.style.fontSize = '12px';
+        vrBtn.style.fontWeight = 'bold';
+        vrBtn.style.background = '#dc2626';
+        vrBtn.style.border = '1px solid #f87171';
+        document.getElementById('vr-btn-container').appendChild(vrBtn);
+
+        // Gym & Ring Lighting
+        const ambientLight = new THREE.AmbientLight(0xe2e8f0, 0.55);
+        scene.add(ambientLight);
+
+        const gymLight = new THREE.PointLight(0xfffbeb, 2.2, 22);
+        gymLight.position.set(-4.5, 4.5, 0);
+        gymLight.castShadow = true;
+        scene.add(gymLight);
+
+        const ringSpotlight = new THREE.SpotLight(0xffffff, 4.5, 25, Math.PI / 4, 0.4);
+        ringSpotlight.position.set(3.8, 6.8, -1.5);
+        ringSpotlight.target.position.set(3.8, 0.8, -1.5);
+        ringSpotlight.castShadow = true;
+        scene.add(ringSpotlight);
+        scene.add(ringSpotlight.target);
+
+        // ============================================================================
+        // 4. PROCEDURAL TEXTURES & 3D ENVIRONMENT (GYM + BAGS + KETTLEBELL + RING)
+        // ============================================================================
+        function createRingCanvasTexture() {
+            const c = document.createElement('canvas');
+            c.width = 512;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#1e3a8a';
+            ctx.fillRect(0, 0, 512, 512);
+
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 14;
+            ctx.strokeRect(24, 24, 464, 464);
+
+            ctx.beginPath();
+            ctx.arc(256, 256, 95, 0, Math.PI * 2);
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 8;
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 34px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('IRON RING VR', 256, 266);
+
+            const tex = new THREE.CanvasTexture(c);
+            return tex;
+        }
+
+        // Gym Floor
+        const gymFloor = new THREE.Mesh(
+            new THREE.PlaneGeometry(28, 24),
+            new THREE.MeshStandardMaterial({ color: 0x1e222b, roughness: 0.85 })
+        );
+        gymFloor.rotation.x = -Math.PI / 2;
+        gymFloor.receiveShadow = true;
+        scene.add(gymFloor);
+
+        // Gym Brick/Concrete Walls
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x171a21, roughness: 0.9 });
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(28, 7, 0.4), wallMat);
+        backWall.position.set(0, 3.5, -8.5);
+        scene.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 7, 24), wallMat);
+        leftWall.position.set(-10, 3.5, 0);
+        scene.add(leftWall);
+
+        // --- A. KETTLEBELL STATION (КАЧАЛКА С ГИРЕЙ) ---
+        const kbStation = new THREE.Group();
+        kbStation.position.set(-5.8, 0, 0.8);
+        scene.add(kbStation);
+
+        // Rubber Gym Mat
+        const rubberMat = new THREE.Mesh(
+            new THREE.BoxGeometry(2.0, 0.04, 2.0),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.95 })
+        );
+        rubberMat.position.y = 0.02;
+        kbStation.add(rubberMat);
+
+        // Kettlebell Stand / Pedestal
+        const kbStand = new THREE.Mesh(
+            new THREE.BoxGeometry(0.75, 0.68, 0.65),
+            new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 })
+        );
+        kbStand.position.set(0, 0.34, -0.45);
+        kbStand.castShadow = true;
+        kbStation.add(kbStand);
+
+        // 3D Cast-Iron Kettlebell Mesh
+        const kettlebellGroup = new THREE.Group();
+        kettlebellGroup.position.set(0, 0.82, -0.45);
+        kbStation.add(kettlebellGroup);
+
+        const ironMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.82, roughness: 0.32 });
+        const kbSphere = new THREE.Mesh(new THREE.SphereGeometry(0.14, 18, 18), ironMat);
+        kbSphere.scale.set(1, 0.92, 1);
+        kbSphere.castShadow = true;
+        kettlebellGroup.add(kbSphere);
+
+        const kbHandle = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.022, 10, 20, Math.PI), ironMat);
+        kbHandle.position.y = 0.11;
+        kettlebellGroup.add(kbHandle);
+
+        // Gold "24 КГ" Badge on Kettlebell
+        const kbBadge = new THREE.Mesh(
+            new THREE.CircleGeometry(0.055, 16),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.7, roughness: 0.3 })
+        );
+        kbBadge.position.set(0, 0, 0.138);
+        kettlebellGroup.add(kbBadge);
+
+        const kbHomeWorldPos = new THREE.Vector3(-5.8, 0.82, 0.35);
+
+        // --- B. PUNCHING BAGS (ТЯЖЁЛАЯ И СКОРОСТНАЯ ГРУШИ) ---
+        const bagsGroup = new THREE.Group();
+        bagsGroup.position.set(-2.5, 0, -1.8);
+        scene.add(bagsGroup);
+
+        // Overhead Steel Frame for Bags
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.35 });
+        const postL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.6, 0.14), frameMat);
+        postL.position.set(-1.6, 1.8, 0);
+        bagsGroup.add(postL);
+
+        const postR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.6, 0.14), frameMat);
+        postR.position.set(1.6, 1.8, 0);
+        bagsGroup.add(postR);
+
+        const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, 0.16), frameMat);
+        crossBeam.position.set(0, 3.55, 0);
+        bagsGroup.add(crossBeam);
+
+        // 1. Heavy Punching Bag (Тяжёлая груша на цепи с физикой маятника)
+        const heavyBagPivot = new THREE.Group();
+        heavyBagPivot.position.set(-0.65, 3.5, 0);
+        bagsGroup.add(heavyBagPivot);
+
+        const chainMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.015, 0.015, 0.85, 8),
+            new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 })
+        );
+        chainMesh.position.y = -0.425;
+        heavyBagPivot.add(chainMesh);
+
+        const heavyBagMat = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.42, metalness: 0.15 });
+        const heavyBagBody = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.35, 20), heavyBagMat);
+        heavyBagBody.position.y = -1.5;
+        heavyBagBody.castShadow = true;
+        heavyBagPivot.add(heavyBagBody);
+
+        // White target stripe on heavy bag
+        const bagStripe = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.244, 0.244, 0.18, 20),
+            new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 })
+        );
+        bagStripe.position.y = -1.35;
+        heavyBagPivot.add(bagStripe);
+
+        const heavyBagPhysics = {
+            angX: 0, angZ: 0,
+            velX: 0, velZ: 0
+        };
+
+        // 2. Speed Bag (Скоростная груша на платформе)
+        const speedPlatform = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.42, 0.42, 0.06, 20),
+            new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.7 })
+        );
+        speedPlatform.position.set(0.75, 2.05, 0);
+        bagsGroup.add(speedPlatform);
+
+        const speedBracket = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1), frameMat);
+        speedBracket.position.set(0.75, 2.8, 0);
+        bagsGroup.add(speedBracket);
+
+        const speedBagPivot = new THREE.Group();
+        speedBagPivot.position.set(0.75, 2.02, 0);
+        bagsGroup.add(speedBagPivot);
+
+        const speedBagBulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.11, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35 })
+        );
+        speedBagBulb.scale.set(0.85, 1.35, 0.85);
+        speedBagBulb.position.y = -0.18;
+        speedBagPivot.add(speedBagBulb);
+
+        const speedBagPhysics = {
+            angX: 0, angZ: 0,
+            velX: 0, velZ: 0
+        };
+
+        // --- C. CHAMPIONSHIP BOXING RING (БОКСЁРСКИЙ РИНГ) ---
+        const ringGroup = new THREE.Group();
+        ringGroup.position.set(3.8, 0, -1.5);
+        scene.add(ringGroup);
+
+        const ringSize = 5.4;
+        const ringDeckHeight = 0.75;
+
+        // Ring Base Platform
+        const ringBase = new THREE.Mesh(
+            new THREE.BoxGeometry(ringSize + 0.4, ringDeckHeight, ringSize + 0.4),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 })
+        );
+        ringBase.position.y = ringDeckHeight / 2;
+        ringBase.receiveShadow = true;
+        ringGroup.add(ringBase);
+
+        // Ring Canvas Mat
+        const ringCanvasMat = new THREE.Mesh(
+            new THREE.PlaneGeometry(ringSize, ringSize),
+            new THREE.MeshStandardMaterial({ map: createRingCanvasTexture(), roughness: 0.75 })
+        );
+        ringCanvasMat.rotation.x = -Math.PI / 2;
+        ringCanvasMat.position.y = ringDeckHeight + 0.005;
+        ringCanvasMat.receiveShadow = true;
+        ringGroup.add(ringCanvasMat);
+
+        // Ring Steps (Лестница на ринг)
+        const ringSteps = new THREE.Mesh(
+            new THREE.BoxGeometry(1.1, 0.38, 0.65),
+            new THREE.MeshStandardMaterial({ color: 0x334155 })
+        );
+        ringSteps.position.set(-ringSize / 2 - 0.35, 0.19, 0);
+        ringGroup.add(ringSteps);
+
+        // 4 Corner Posts & Ropes
+        const halfR = ringSize / 2 - 0.15;
+        const cornerCoords = [
+            [-halfR, -halfR, 0xdc2626], // Red corner
+            [halfR, -halfR, 0xf8fafc],
+            [halfR, halfR, 0x2563eb],   // Blue corner
+            [-halfR, halfR, 0xf8fafc]
+        ];
+
+        cornerCoords.forEach(([cx, cz, padColor]) => {
+            const post = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.06, 0.06, 1.45, 12),
+                frameMat
+            );
+            post.position.set(cx, ringDeckHeight + 0.725, cz);
+            ringGroup.add(post);
+
+            const cornerPad = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.11, 0.11, 1.15, 12),
+                new THREE.MeshStandardMaterial({ color: padColor, roughness: 0.5 })
+            );
+            cornerPad.position.set(cx * 0.95, ringDeckHeight + 0.68, cz * 0.95);
+            ringGroup.add(cornerPad);
+        });
+
+        // 3 Tiers of Ropes
+        const ropeColors = [0xdc2626, 0xf8fafc, 0x2563eb];
+        [0.45, 0.82, 1.18].forEach((ry, idx) => {
+            const ropeMat = new THREE.MeshStandardMaterial({ color: ropeColors[idx], roughness: 0.6 });
+            const span = halfR * 2;
+            const r1 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, span, 8), ropeMat);
+            r1.rotation.z = Math.PI / 2;
+            r1.position.set(0, ringDeckHeight + ry, -halfR);
+            ringGroup.add(r1);
+
+            const r2 = r1.clone();
+            r2.position.set(0, ringDeckHeight + ry, halfR);
+            ringGroup.add(r2);
+
+            const r3 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, span, 8), ropeMat);
+            r3.rotation.x = Math.PI / 2;
+            r3.position.set(-halfR, ringDeckHeight + ry, 0);
+            ringGroup.add(r3);
+
+            const r4 = r3.clone();
+            r4.position.set(halfR, ringDeckHeight + ry, 0);
+            ringGroup.add(r4);
+        });
+
+        // ============================================================================
+        // 5. PLAYER ARMS WITH GROWING BICEPS & BOXING GLOVES (VR & DESKTOP)
+        // ============================================================================
+        function createBoxerArmAndGlove(isLeft = true) {
+            const armRoot = new THREE.Group();
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.65 });
+            const gloveMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35, metalness: 0.1 });
+            const cuffMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+
+            // Forearm
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.056, 0.24, 12), skinMat);
+            forearm.rotation.x = Math.PI / 2;
+            forearm.position.set(0, -0.02, 0.16);
+            armRoot.add(forearm);
+
+            // BICEP MUSCLE MESH (Scales dynamically as you lift the kettlebell!)
+            const bicepGeo = new THREE.SphereGeometry(0.062, 16, 16);
+            const bicepMesh = new THREE.Mesh(bicepGeo, skinMat);
+            bicepMesh.scale.set(1.0, 1.0, 1.55);
+            bicepMesh.position.set(isLeft ? -0.01 : 0.01, 0.015, 0.31);
+            armRoot.add(bicepMesh);
+
+            // Wrist Cuff
+            const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.058, 0.075, 14), cuffMat);
+            cuff.rotation.x = Math.PI / 2;
+            cuff.position.set(0, 0, 0.04);
+            armRoot.add(cuff);
+
+            // Padded Boxing Glove
+            const gloveMain = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 16), gloveMat);
+            gloveMain.scale.set(0.95, 0.88, 1.22);
+            gloveMain.position.set(0, 0.005, -0.045);
+            gloveMain.castShadow = true;
+            armRoot.add(gloveMain);
+
+            // Thumb
+            const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 10), gloveMat);
+            thumb.scale.set(0.8, 0.8, 1.3);
+            thumb.position.set(isLeft ? 0.065 : -0.065, -0.02, -0.03);
+            armRoot.add(thumb);
+
+            return { armRoot, bicepMesh };
+        }
+
+        // VR Controllers
+        const controller0 = renderer.xr.getController(0); // Right
+        const controller1 = renderer.xr.getController(1); // Left
+        playerRig.add(controller0);
+        playerRig.add(controller1);
+
+        const vrRightArm = createBoxerArmAndGlove(false);
+        const vrLeftArm = createBoxerArmAndGlove(true);
+        controller0.add(vrRightArm.armRoot);
+        controller1.add(vrLeftArm.armRoot);
+
+        // Desktop First-Person Arms attached to Camera
+        const pcArmsContainer = new THREE.Group();
+        pcArmsContainer.position.set(0, -0.26, -0.42);
+        camera.add(pcArmsContainer);
+
+        const pcLeftArm = createBoxerArmAndGlove(true);
+        pcLeftArm.armRoot.position.set(-0.24, 0, 0);
+        pcArmsContainer.add(pcLeftArm.armRoot);
+
+        const pcRightArm = createBoxerArmAndGlove(false);
+        pcRightArm.armRoot.position.set(0.24, 0, 0);
+        pcArmsContainer.add(pcRightArm.armRoot);
+
+        renderer.xr.addEventListener('sessionstart', () => {
+            pcArmsContainer.visible = false;
+            showToast('VR Бокс активен! Бейте руками, качайте гирю кнопкой Grip!');
+        });
+        renderer.xr.addEventListener('sessionend', () => {
+            pcArmsContainer.visible = true;
+        });
+
+        // Update Bicep Visuals across both VR and PC arms!
+        function updateBicepVisuals() {
+            const pct = Math.round(state.bicepLevel * 100);
+            document.getElementById('bicep-bar').style.width = `${pct}%`;
+
+            let label = `${pct}% (Норма)`;
+            if (pct >= 100) label = `100% (ЛИМИТ! БАЗУКИ)`;
+            else if (pct >= 65) label = `${pct}% (Качок)`;
+            else if (pct >= 25) label = `${pct}% (Разогрев)`;
+            document.getElementById('bicep-pct-label').textContent = label;
+
+            document.getElementById('bicep-limit-msg').classList.toggle('hidden', pct < 100);
+
+            // Dramatic visual muscle growth up to 2.35x thickness!
+            const girthScale = 1.0 + state.bicepLevel * 1.35;
+            const peakHeight = 1.0 + state.bicepLevel * 1.55;
+
+            [vrLeftArm.bicepMesh, vrRightArm.bicepMesh, pcLeftArm.bicepMesh, pcRightArm.bicepMesh].forEach((b) => {
+                b.scale.set(girthScale, peakHeight, 1.55 + state.bicepLevel * 0.35);
+            });
+        }
+
+        // Kettlebell Curl Action (For Fun + Bicep Pump with Hard Cap)
+        function doKettlebellRep() {
+            sfx.playKettlebellClank();
+            state.kettlebellReps++;
+            state.kbPumpAnim = 0.45;
+            document.getElementById('reps-counter').textContent = `Повторов: ${state.kettlebellReps}`;
+
+            if (state.bicepLevel < 1.0) {
+                state.bicepLevel = Math.min(1.0, +(state.bicepLevel + 0.065).toFixed(3));
+                updateBicepVisuals();
+                if (state.bicepLevel >= 1.0) {
+                    showToast('💪 ЛИМИТ БИЦЕПСА 100%! Больше банки не вырастут!');
+                } else {
+                    showToast(`💪 +1 Повтор! Бицепс: ${Math.round(state.bicepLevel * 100)}%`);
+                }
+            } else {
+                showToast('💪 Гиря поднята! Бицепс уже на максимальном лимите (100%)!');
+            }
+        }
+
+        // VR Grip Listeners for Kettlebell Grabbing & Lifting
+        let vrHoldingKB = false;
+        let kbLowestY = 999;
+        let kbRepReady = false;
+
+        function onVRGripStart(controller) {
+            sfx.init();
+            const ctrlPos = new THREE.Vector3();
+            controller.getWorldPosition(ctrlPos);
+            const kbPos = new THREE.Vector3();
+            kettlebellGroup.getWorldPosition(kbPos);
+
+            if (ctrlPos.distanceTo(kbPos) < 0.65) {
+                vrHoldingKB = true;
+                controller.add(kettlebellGroup);
+                kettlebellGroup.position.set(0, -0.14, -0.05);
+                kbLowestY = ctrlPos.y;
+                kbRepReady = true;
+                showToast('🏋️ Гиря взята! Поднимайте и опускайте руку для кача!');
+            }
+        }
+
+        function onVRGripEnd(controller) {
+            if (vrHoldingKB && kettlebellGroup.parent === controller) {
+                vrHoldingKB = false;
+                kbStation.add(kettlebellGroup);
+                kettlebellGroup.position.set(0, 0.82, -0.45);
+            }
+        }
+
+        controller0.addEventListener('squeezestart', () => onVRGripStart(controller0));
+        controller0.addEventListener('squeezeend', () => onVRGripEnd(controller0));
+        controller1.addEventListener('squeezestart', () => onVRGripStart(controller1));
+        controller1.addEventListener('squeezeend', () => onVRGripEnd(controller1));
+
+        // ============================================================================
+        // 6. BOXING OPPONENT AI & COMBAT MECHANICS (JAB, CROSS, HOOK, UPPERCUT)
+        // ============================================================================
+        const opponentGroup = new THREE.Group();
+        opponentGroup.position.set(3.8, ringDeckHeight, -2.6);
+        opponentGroup.visible = false;
+        scene.add(opponentGroup);
+
+        let enemyParts = null;
+        const enemyState = {
+            name: 'Новичок Саня',
+            hp: 110,
+            maxHp: 110,
+            stamina: 100,
+            speed: 1.5,
+            damage: 9,
+            guardChance: 0.25,
+            isGuarding: false,
+            stunTimer: 0,
+            attackCooldown: 1.4,
+            windupTimer: 0,
+            isWindingUp: false,
+            nextAttackType: 'jab',
+            knockedDown: false
+        };
+
+        function buildOpponentBoxer(cfg) {
+            opponentGroup.clear();
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xd99b66, roughness: 0.6 });
+            const shortsMat = new THREE.MeshStandardMaterial({ color: cfg.shorts, roughness: 0.5 });
+            const gloveMat = new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.35 });
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 });
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.11, 0.085, 0.82, 10);
+            const legL = new THREE.Mesh(legGeo, skinMat);
+            legL.position.set(-0.17, 0.44, 0);
+            opponentGroup.add(legL);
+
+            const legR = new THREE.Mesh(legGeo, skinMat);
+            legR.position.set(0.17, 0.44, 0);
+            opponentGroup.add(legR);
+
+            // Boxing Boots
+            const bootGeo = new THREE.BoxGeometry(0.14, 0.14, 0.26);
+            const bootL = new THREE.Mesh(bootGeo, shoeMat);
+            bootL.position.set(-0.17, 0.07, 0.04);
+            opponentGroup.add(bootL);
+            const bootR = new THREE.Mesh(bootGeo, shoeMat);
+            bootR.position.set(0.17, 0.07, 0.04);
+            opponentGroup.add(bootR);
+
+            // Boxing Trunks (Shorts)
+            const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.25, 0.32, 14), shortsMat);
+            shorts.position.set(0, 0.92, 0);
+            opponentGroup.add(shorts);
+
+            // Muscular Torso
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.56, 14), skinMat);
+            torso.position.set(0, 1.32, 0);
+            torso.castShadow = true;
+            opponentGroup.add(torso);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 16), skinMat);
+            head.scale.set(0.92, 1.08, 0.98);
+            head.position.set(0, 1.76, 0);
+            head.castShadow = true;
+            opponentGroup.add(head);
+
+            // Guard Arms & Gloves
+            const leftGloveGroup = new THREE.Group();
+            leftGloveGroup.position.set(-0.22, 1.56, 0.28);
+            const lGlove = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 14), gloveMat);
+            lGlove.scale.set(0.95, 1.1, 1.0);
+            leftGloveGroup.add(lGlove);
+            opponentGroup.add(leftGloveGroup);
+
+            const rightGloveGroup = new THREE.Group();
+            rightGloveGroup.position.set(0.22, 1.56, 0.28);
+            const rGlove = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 14), gloveMat);
+            rGlove.scale.set(0.95, 1.1, 1.0);
+            rightGloveGroup.add(rGlove);
+            opponentGroup.add(rightGloveGroup);
+
+            enemyParts = { torso, head, leftGloveGroup, rightGloveGroup };
+        }
+
+        // Punch Classification & Execution (Jab, Cross, Hook, Uppercut)
+        const PUNCH_SPECS = {
+            jab:      { label: '👊 ДЖЕБ!',      damage: 10, stam: 5,  guardBypass: 0.15, stun: 0.15 },
+            cross:    { label: '💥 КРОСС!',     damage: 16, stam: 9,  guardBypass: 0.25, stun: 0.25 },
+            hookL:    { label: '↪️ ЛЕВЫЙ ХУК!', damage: 22, stam: 13, guardBypass: 0.75, stun: 0.42 },
+            hookR:    { label: '↩️ ПРАВЫЙ ХУК!',damage: 24, stam: 14, guardBypass: 0.75, stun: 0.45 },
+            uppercut: { label: '⬆️ АППЕРКОТ!',  damage: 26, stam: 16, guardBypass: 0.85, stun: 0.55 }
+        };
+
+        function executePlayerPunch(type) {
+            sfx.init();
+            const spec = PUNCH_SPECS[type] || PUNCH_SPECS.jab;
+
+            if (state.matchActive && state.player.stamina < spec.stam) {
+                showToast('😓 Нет выносливости! Опустите руки и отдышитесь!');
+                return;
+            }
+            if (state.matchActive) {
+                state.player.stamina = Math.max(0, state.player.stamina - spec.stam);
+            }
+
+            state.player.activePunchType = type;
+            if (type === 'jab' || type === 'hookL') {
+                state.player.leftPunchAnim = 0.26;
+            } else {
+                state.player.rightPunchAnim = 0.28;
+            }
+
+            // Tiny fun bonus (+10% max) if you pumped biceps to 100% in the gym!
+            const bicepFunBonus = 1.0 + state.bicepLevel * 0.12;
+            const totalPower = spec.damage * bicepFunBonus;
+
+            // Check collisions with Heavy Bag, Speed Bag, or Ring Opponent
+            const playerWorldPos = new THREE.Vector3();
+            camera.getWorldPosition(playerWorldPos);
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+
+            // 1. Check Heavy Bag
+            const heavyBagPos = new THREE.Vector3(-3.15, 1.5, -1.8);
+            if (playerWorldPos.distanceTo(heavyBagPos) < 1.65) {
+                sfx.playPunchImpact(totalPower / 14, true);
+                const impulse = (totalPower / 18) * 0.28;
+                heavyBagPhysics.velZ -= forward.z * impulse;
+                heavyBagPhysics.velX += forward.x * impulse;
+                if (type === 'hookL') heavyBagPhysics.velX += 0.32;
+                if (type === 'hookR') heavyBagPhysics.velX -= 0.32;
+                showToast(`${spec.label} (${Math.round(totalPower)} ед. по мешку)`);
+                return;
+            }
+
+            // 2. Check Speed Bag
+            const speedBagPos = new THREE.Vector3(-1.75, 1.8, -1.8);
+            if (playerWorldPos.distanceTo(speedBagPos) < 1.55) {
+                sfx.playSpeedBagPop();
+                speedBagPhysics.velZ -= forward.z * 0.85;
+                speedBagPhysics.velX += forward.x * 0.85;
+                showToast(`⚡ ${spec.label} по скоростной груше!`);
+                return;
+            }
+
+            // 3. Check Boxing Opponent on Ring
+            if (state.matchActive && !state.knockdownActive && opponentGroup.visible) {
+                const enemyPos = opponentGroup.position.clone();
+                const dist = Math.hypot(playerWorldPos.x - enemyPos.x, playerWorldPos.z - enemyPos.z);
+                if (dist < 1.65) {
+                    let dmg = totalPower;
+                    let blocked = false;
+
+                    // Hooks & Uppercuts bypass front high guard!
+                    if (enemyState.isGuarding && Math.random() > spec.guardBypass) {
+                        dmg = Math.round(dmg * 0.22);
+                        blocked = true;
+                        sfx.playBlock();
+                    } else {
+                        sfx.playPunchImpact(totalPower / 13, false);
+                        enemyState.stunTimer = spec.stun;
+                        // Head snap animation
+                        if (enemyParts) {
+                            enemyParts.head.position.z = -0.12;
+                            enemyParts.head.position.y = type === 'uppercut' ? 1.86 : 1.76;
+                        }
+                    }
+
+                    enemyState.hp = Math.max(0, enemyState.hp - Math.round(dmg));
+                    updateFightHUD();
+
+                    if (blocked) {
+                        showToast(`🛡️ Блок соперника! (-${Math.round(dmg)})`);
+                    } else {
+                        showToast(`${spec.label} -${Math.round(dmg)} HP!`);
+                    }
+
+                    if (enemyState.hp <= 0) {
+                        triggerKnockdown('enemy');
+                    }
+                }
+            }
+        }
+
+        // VR Controller Velocity Punch Classifier!
+        const prevCtrlPos = [new THREE.Vector3(), new THREE.Vector3()];
+        const vrPunchCooldown = [0, 0];
+
+        function updateVRPunchesAndGuard(dt) {
+            if (!renderer.xr.isPresenting) return;
+
+            const headPos = new THREE.Vector3();
+            camera.getWorldPosition(headPos);
+
+            const leftPos = new THREE.Vector3();
+            const rightPos = new THREE.Vector3();
+            controller1.getWorldPosition(leftPos);
+            controller0.getWorldPosition(rightPos);
+
+            // Check if player holds both gloves near face -> High Guard!
+            const leftNearFace = leftPos.distanceTo(headPos) < 0.42;
+            const rightNearFace = rightPos.distanceTo(headPos) < 0.42;
+            state.player.isBlocking = leftNearFace && rightNearFace;
+
+            // VR Kettlebell Curl Detection
+            if (vrHoldingKB) {
+                const activePos = kettlebellGroup.parent === controller0 ? rightPos : leftPos;
+                if (activePos.y < kbLowestY) kbLowestY = activePos.y;
+                if (kbRepReady && (activePos.y - kbLowestY) > 0.36) {
+                    kbRepReady = false;
+                    doKettlebellRep();
+                }
+                if (!kbRepReady && activePos.y < kbLowestY + 0.12) {
+                    kbRepReady = true;
+                }
+            }
+
+            // Classify VR punches by velocity vector!
+            [controller1, controller0].forEach((ctrl, idx) => {
+                vrPunchCooldown[idx] = Math.max(0, vrPunchCooldown[idx] - dt);
+                const curr = idx === 0 ? leftPos : rightPos;
+                const vel = new THREE.Vector3().subVectors(curr, prevCtrlPos[idx]).divideScalar(Math.max(0.001, dt));
+                prevCtrlPos[idx].copy(curr);
+
+                const speed = vel.length();
+                if (speed > 2.2 && vrPunchCooldown[idx] <= 0 && !vrHoldingKB) {
+                    // Convert velocity into camera-local frame
+                    const camQuatInv = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
+                    const localVel = vel.clone().applyQuaternion(camQuatInv);
+
+                    let punchType = idx === 0 ? 'jab' : 'cross';
+                    if (localVel.y > 1.8 && Math.abs(localVel.z) > 1.0) {
+                        punchType = 'uppercut';
+                    } else if (Math.abs(localVel.x) > Math.abs(localVel.z) * 0.85) {
+                        punchType = idx === 0 ? 'hookL' : 'hookR';
+                    }
+
+                    executePlayerPunch(punchType);
+                    vrPunchCooldown[idx] = 0.34;
+                }
+            });
+        }
+
+        // ============================================================================
+        // 7. RING MATCH MANAGEMENT (ROUNDS, KNOCKDOWNS, AI)
+        // ============================================================================
+        function teleportToZone(zone) {
+            if (zone === 'kettlebell') {
+                playerRig.position.set(-5.8, 0, 1.9);
+                playerRig.rotation.set(0, 0, 0);
+                document.getElementById('zone-indicator').textContent = 'Зона: Качалка (Гиря)';
+                showToast('🏋️ Вы у стойки с гирей');
+            } else if (zone === 'bags') {
+                playerRig.position.set(-2.5, 0, -0.35);
+                playerRig.rotation.set(0, 0, 0);
+                document.getElementById('zone-indicator').textContent = 'Зона: Боксёрские груши';
+                showToast('🥊 Вы у боксёрских груш');
+            } else if (zone === 'ring') {
+                playerRig.position.set(3.8, ringDeckHeight, -0.2);
+                playerRig.rotation.set(0, 0, 0);
+                document.getElementById('zone-indicator').textContent = 'Зона: Боксёрский Ринг';
+                showToast('🏟️ Вы на ринге!');
+            }
+        }
+
+        function startBoxingMatch() {
+            sfx.init();
+            const key = document.getElementById('opponent-select').value;
+            const cfg = OPPONENTS[key];
+
+            teleportToZone('ring');
+            buildOpponentBoxer(cfg);
+
+            enemyState.name = cfg.name;
+            enemyState.hp = cfg.hp;
+            enemyState.maxHp = cfg.hp;
+            enemyState.stamina = 100;
+            enemyState.speed = cfg.speed;
+            enemyState.damage = cfg.damage;
+            enemyState.guardChance = cfg.guardChance;
+            enemyState.stunTimer = 0;
+            enemyState.isWindingUp = false;
+
+            opponentGroup.visible = true;
+            opponentGroup.position.set(3.8, ringDeckHeight, -2.5);
+            opponentGroup.rotation.set(0, 0, 0);
+
+            state.matchActive = true;
+            state.round = 1;
+            state.roundTime = 90;
+            state.knockdownActive = false;
+            state.player.hp = 100;
+            state.player.stamina = 100;
+
+            document.getElementById('side-panel').classList.add('hidden');
+            document.getElementById('fight-hud').classList.remove('hidden');
+            document.getElementById('ring-overlay-banner').classList.add('hidden');
+            document.getElementById('hud-enemy-name').textContent = cfg.name.toUpperCase();
+
+            updateFightHUD();
+            sfx.playRingBell(1);
+            showToast(`🔔 РАУНД 1! Бой против: ${cfg.name}`);
+        }
+
+        function endBoxingMatch(resultTitle, resultSub) {
+            state.matchActive = false;
+            state.knockdownActive = false;
+            sfx.playRingBell(3);
+
+            const banner = document.getElementById('ring-overlay-banner');
+            document.getElementById('banner-title').textContent = resultTitle;
+            document.getElementById('banner-subtitle').textContent = resultSub;
+            document.getElementById('banner-actions').classList.remove('hidden');
+            banner.classList.remove('hidden');
+        }
+
+        function leaveRingToGym() {
+            state.matchActive = false;
+            state.knockdownActive = false;
+            opponentGroup.visible = false;
+            document.getElementById('ring-overlay-banner').classList.add('hidden');
+            document.getElementById('fight-hud').classList.add('hidden');
+            document.getElementById('side-panel').classList.remove('hidden');
+            teleportToZone('kettlebell');
+        }
+
+        let kdInterval = null;
+        function triggerKnockdown(who) {
+            state.knockdownActive = true;
+            state.knockdownTarget = who;
+            state.knockdownCount = 0;
+            sfx.playRingBell(1);
+
+            const banner = document.getElementById('ring-overlay-banner');
+            document.getElementById('banner-actions').classList.add('hidden');
+            document.getElementById('banner-title').textContent = who === 'enemy' ? '💥 НОКДАУН СОПЕРНИКА!' : '💫 ВЫ В НОКДАУНЕ!';
+            document.getElementById('banner-subtitle').textContent = 'Рефери открывает счёт...';
+            banner.classList.remove('hidden');
+
+            if (who === 'enemy') {
+                opponentGroup.rotation.x = -Math.PI / 2;
+                opponentGroup.position.y = ringDeckHeight + 0.25;
+            }
+
+            clearInterval(kdInterval);
+            kdInterval = setInterval(() => {
+                state.knockdownCount++;
+                document.getElementById('banner-subtitle').textContent = `Счёт: ${state.knockdownCount}...`;
+
+                if (state.knockdownCount >= 6) {
+                    clearInterval(kdInterval);
+                    if (who === 'enemy') {
+                        endBoxingMatch('🏆 ПОБЕДА НОКАУТОМ!', `${enemyState.name} не смог подняться до счёта 10!`);
+                    } else {
+                        endBoxingMatch('💀 ПОРАЖЕНИЕ НОКАУТОМ', 'Вы не успели восстановиться. Потренируйтесь в зале!');
+                    }
+                }
+            }, 650);
+        }
+
+        function updateFightHUD() {
+            document.getElementById('hud-player-hp').textContent = Math.ceil(state.player.hp);
+            document.getElementById('hud-player-hp-bar').style.width = `${state.player.hp}%`;
+            document.getElementById('hud-player-stam-bar').style.width = `${state.player.stamina}%`;
+
+            document.getElementById('hud-enemy-hp').textContent = Math.ceil(enemyState.hp);
+            document.getElementById('hud-enemy-hp-bar').style.width = `${(enemyState.hp / enemyState.maxHp) * 100}%`;
+            document.getElementById('hud-enemy-stam-bar').style.width = `${enemyState.stamina}%`;
+
+            document.getElementById('hud-round').textContent = `РАУНД ${state.round} / ${state.maxRounds}`;
+            const mins = Math.floor(state.roundTime / 60);
+            const secs = Math.floor(state.roundTime % 60).toString().padStart(2, '0');
+            document.getElementById('hud-timer').textContent = `0${mins}:${secs}`;
+        }
+
+        function updateOpponentAI(dt) {
+            if (!state.matchActive || state.knockdownActive || !opponentGroup.visible) return;
+
+            // Round timer
+            state.roundTime -= dt;
+            if (state.roundTime <= 0) {
+                if (state.round < state.maxRounds) {
+                    state.round++;
+                    state.roundTime = 90;
+                    state.player.hp = Math.min(100, state.player.hp + 20);
+                    enemyState.hp = Math.min(enemyState.maxHp, enemyState.hp + 20);
+                    sfx.playRingBell(1);
+                    showToast(`🔔 РАУНД ${state.round}! Перерыв окончен!`);
+                } else {
+                    const won = state.player.hp >= enemyState.hp;
+                    endBoxingMatch(
+                        won ? '🏆 ПОБЕДА ПО ОЧКАМ!' : '🥈 ПОРАЖЕНИЕ ПО ОЧКАМ',
+                        `Итог 3 раундов — Вы: ${Math.ceil(state.player.hp)} HP | Соперник: ${Math.ceil(enemyState.hp)} HP`
+                    );
+                    return;
+                }
+            }
+
+            // Head recoil recovery
+            if (enemyParts) {
+                enemyParts.head.position.z = THREE.MathUtils.lerp(enemyParts.head.position.z, 0, 10 * dt);
+                enemyParts.head.position.y = THREE.MathUtils.lerp(enemyParts.head.position.y, 1.76, 10 * dt);
+            }
+
+            if (enemyState.stunTimer > 0) {
+                enemyState.stunTimer -= dt;
+                return;
+            }
+
+            const playerWorld = new THREE.Vector3();
+            camera.getWorldPosition(playerWorld);
+
+            const dx = playerWorld.x - opponentGroup.position.x;
+            const dz = playerWorld.z - opponentGroup.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            // Face player
+            opponentGroup.rotation.y = Math.atan2(dx, dz);
+
+            // Keep inside ring ropes
+            const minX = 3.8 - halfR + 0.4;
+            const maxX = 3.8 + halfR - 0.4;
+            const minZ = -1.5 - halfR + 0.4;
+            const maxZ = -1.5 + halfR - 0.4;
+
+            if (dist > 1.25) {
+                opponentGroup.position.x = THREE.MathUtils.clamp(opponentGroup.position.x + (dx / dist) * enemyState.speed * dt, minX, maxX);
+                opponentGroup.position.z = THREE.MathUtils.clamp(opponentGroup.position.z + (dz / dist) * enemyState.speed * dt, minZ, maxZ);
+            }
+
+            // Guard & Attack Decision
+            if (!enemyState.isWindingUp) {
+                enemyState.attackCooldown -= dt;
+                enemyState.isGuarding = Math.random() < enemyState.guardChance;
+                if (enemyParts) {
+                    const guardZ = enemyState.isGuarding ? 0.34 : 0.24;
+                    enemyParts.leftGloveGroup.position.z = THREE.MathUtils.lerp(enemyParts.leftGloveGroup.position.z, guardZ, 8 * dt);
+                    enemyParts.rightGloveGroup.position.z = THREE.MathUtils.lerp(enemyParts.rightGloveGroup.position.z, guardZ, 8 * dt);
+                }
+
+                if (enemyState.attackCooldown <= 0 && dist <= 1.55) {
+                    enemyState.isWindingUp = true;
+                    enemyState.isGuarding = false;
+                    enemyState.windupTimer = 0.52;
+                    const types = ['jab', 'hook', 'uppercut'];
+                    enemyState.nextAttackType = types[Math.floor(Math.random() * types.length)];
+                }
+            } else {
+                enemyState.windupTimer -= dt;
+                if (enemyParts) {
+                    // Telegraph punch windup
+                    enemyParts.rightGloveGroup.position.z = 0.12;
+                }
+                if (enemyState.windupTimer <= 0) {
+                    enemyState.isWindingUp = false;
+                    enemyState.attackCooldown = 1.25 + Math.random() * 0.9;
+                    if (enemyParts) enemyParts.rightGloveGroup.position.z = 0.62;
+
+                    if (dist <= 1.65 && state.player.invulnTimer <= 0) {
+                        let incoming = enemyState.damage;
+                        if (state.player.isBlocking) {
+                            incoming = Math.round(incoming * 0.2); // Block reduces 80% damage!
+                            sfx.playBlock();
+                            showToast(`🛡️ БЛОК! Получено всего ${incoming} урона`);
+                        } else {
+                            sfx.playPunchImpact(1.1, false);
+                            showToast(`💥 Пропущен ${enemyState.nextAttackType === 'hook' ? 'ХУК' : 'удар'}! (-${incoming} HP)`);
+                        }
+                        state.player.hp = Math.max(0, state.player.hp - incoming);
+                        state.player.invulnTimer = 0.45;
+
+                        if (state.player.hp <= 0) {
+                            triggerKnockdown('player');
+                        }
+                    }
+                }
+            }
+
+            updateFightHUD();
+        }
+
+        // ============================================================================
+        // 8. DESKTOP CONTROLS & UI BINDINGS
+        // ============================================================================
+        let toastTimer = null;
+        function showToast(text) {
+            const banner = document.getElementById('toast-banner');
+            document.getElementById('toast-msg').textContent = text;
+            banner.classList.remove('opacity-0', 'translate-y-2');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                banner.classList.add('opacity-0', 'translate-y-2');
+            }, 1900);
+        }
+
+        const keys = {};
+        let yaw = 0;
+        let pitch = 0;
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'KeyF') doKettlebellRep();
+            if (e.code === 'KeyQ') executePlayerPunch('hookL');
+            if (e.code === 'KeyE') executePlayerPunch('hookR');
+            if (e.code === 'KeyR') executePlayerPunch('uppercut');
+            if (e.code === 'KeyC') executePlayerPunch('cross');
+            if (e.code === 'Space') {
+                e.preventDefault();
+                state.player.isBlocking = true;
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            if (e.code === 'Space') state.player.isBlocking = false;
+        });
+
+        // Mouse Look & Click Punches on Desktop
+        let isMouseDown = false;
+        let lastMouse = { x: 0, y: 0 };
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            sfx.init();
+            isMouseDown = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            if (e.button === 0) {
+                executePlayerPunch(Math.random() > 0.45 ? 'jab' : 'cross');
+            } else if (e.button === 2) {
+                executePlayerPunch('uppercut');
+            }
+        });
+        window.addEventListener('pointermove', (e) => {
+            if (!isMouseDown || renderer.xr.isPresenting) return;
+            yaw -= (e.clientX - lastMouse.x) * 0.004;
+            pitch = Math.max(-0.95, Math.min(0.95, pitch - (e.clientY - lastMouse.y) * 0.004));
+            lastMouse = { x: e.clientX, y: e.clientY };
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = yaw;
+            camera.rotation.x = pitch;
+        });
+        window.addEventListener('pointerup', () => { isMouseDown = false; });
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // UI Button Listeners
+        document.getElementById('tp-kettlebell').addEventListener('click', () => teleportToZone('kettlebell'));
+        document.getElementById('tp-bags').addEventListener('click', () => teleportToZone('bags'));
+        document.getElementById('tp-ring').addEventListener('click', () => teleportToZone('ring'));
+
+        document.getElementById('btn-pump-kb').addEventListener('click', () => doKettlebellRep());
+        document.getElementById('btn-start-fight').addEventListener('click', () => startBoxingMatch());
+        document.getElementById('btn-leave-ring').addEventListener('click', () => leaveRingToGym());
+        document.getElementById('btn-rematch').addEventListener('click', () => startBoxingMatch());
+        document.getElementById('btn-back-gym').addEventListener('click', () => leaveRingToGym());
+
+        document.querySelectorAll('.punch-btn').forEach((btn) => {
+            btn.addEventListener('click', () => executePlayerPunch(btn.dataset.punch));
+        });
+
+        const blockPadBtn = document.getElementById('btn-hold-block');
+        blockPadBtn.addEventListener('pointerdown', () => { state.player.isBlocking = true; });
+        blockPadBtn.addEventListener('pointerup', () => { state.player.isBlocking = false; });
+
+        document.getElementById('btn-toggle-panel').addEventListener('click', (e) => {
+            const p = document.getElementById('side-panel');
+            const hidden = p.classList.toggle('opacity-0');
+            p.classList.toggle('pointer-events-none', hidden);
+            e.target.textContent = hidden ? 'Показать панель' : 'Скрыть панель';
+        });
+
+        // ============================================================================
+        // 9. MAIN ANIMATION & PHYSICS LOOP
+        // ============================================================================
+        const clock = new THREE.Clock();
+        let snapCooldown = 0;
+
+        function updateLocomotion(dt) {
+            const speed = 3.0;
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+            // Desktop WASD (Movement & Slipping/Dodging)
+            if (keys['KeyW'] || keys['ArrowUp']) playerRig.position.addScaledVector(forward, speed * dt);
+            if (keys['KeyS'] || keys['ArrowDown']) playerRig.position.addScaledVector(forward, -speed * dt);
+            if (keys['KeyA'] || keys['ArrowLeft']) playerRig.position.addScaledVector(right, -speed * dt);
+            if (keys['KeyD'] || keys['ArrowRight']) playerRig.position.addScaledVector(right, speed * dt);
+
+            // WebXR Meta Quest Thumbsticks
+            const session = renderer.xr.getSession();
+            if (session) {
+                snapCooldown = Math.max(0, snapCooldown - dt);
+                for (const src of session.inputSources) {
+                    if (!src.gamepad || src.gamepad.axes.length < 4) continue;
+                    const sx = src.gamepad.axes[2];
+                    const sy = src.gamepad.axes[3];
+                    if (src.handedness === 'left') {
+                        if (Math.abs(sy) > 0.15) playerRig.position.addScaledVector(forward, -sy * speed * dt);
+                        if (Math.abs(sx) > 0.15) playerRig.position.addScaledVector(right, sx * speed * dt);
+                    } else if (src.handedness === 'right' && Math.abs(sx) > 0.65 && snapCooldown <= 0) {
+                        playerRig.rotation.y -= Math.sign(sx) * (Math.PI / 4);
+                        snapCooldown = 0.28;
+                    }
+                }
+            }
+        }
+
+        function updatePhysicsAndAnimations(dt) {
+            // Player Stamina & Invuln Recovery
+            state.player.invulnTimer = Math.max(0, state.player.invulnTimer - dt);
+            if (!state.player.isBlocking) {
+                state.player.stamina = Math.min(100, state.player.stamina + 20 * dt);
+            }
+
+            // Kettlebell Pump Animation (when triggered on Desktop)
+            if (state.kbPumpAnim > 0) {
+                state.kbPumpAnim -= dt;
+                const lift = Math.sin((1 - state.kbPumpAnim / 0.45) * Math.PI) * 0.55;
+                kettlebellGroup.position.y = 0.82 + lift;
+            } else if (!vrHoldingKB) {
+                kettlebellGroup.position.y = 0.82;
+            }
+
+            // Heavy Bag Spring Pendulum Physics
+            const springK = 14.0;
+            const damping = 3.2;
+            heavyBagPhysics.velX += (-springK * heavyBagPhysics.angX - damping * heavyBagPhysics.velX) * dt;
+            heavyBagPhysics.velZ += (-springK * heavyBagPhysics.angZ - damping * heavyBagPhysics.velZ) * dt;
+            heavyBagPhysics.angX += heavyBagPhysics.velX * dt;
+            heavyBagPhysics.angZ += heavyBagPhysics.velZ * dt;
+            heavyBagPivot.rotation.z = heavyBagPhysics.angX;
+            heavyBagPivot.rotation.x = heavyBagPhysics.angZ;
+
+            // Speed Bag Fast Bounce Physics
+            const speedK = 48.0;
+            const speedDamp = 4.5;
+            speedBagPhysics.velX += (-speedK * speedBagPhysics.angX - speedDamp * speedBagPhysics.velX) * dt;
+            speedBagPhysics.velZ += (-speedK * speedBagPhysics.angZ - speedDamp * speedBagPhysics.velZ) * dt;
+            speedBagPhysics.angX += speedBagPhysics.velX * dt;
+            speedBagPhysics.angZ += speedBagPhysics.velZ * dt;
+            speedBagPivot.rotation.z = speedBagPhysics.angX;
+            speedBagPivot.rotation.x = speedBagPhysics.angZ;
+
+            // Desktop Arms Punching & Blocking Animations
+            if (state.player.leftPunchAnim > 0) {
+                state.player.leftPunchAnim -= dt;
+                const p = Math.sin((1 - state.player.leftPunchAnim / 0.26) * Math.PI);
+                pcLeftArm.armRoot.position.z = -p * 0.42;
+                pcLeftArm.armRoot.position.x = state.player.activePunchType === 'hookL' ? (-0.24 + p * 0.22) : -0.24;
+            } else if (state.player.isBlocking) {
+                pcLeftArm.armRoot.position.lerp(new THREE.Vector3(-0.11, 0.14, -0.05), 14 * dt);
+            } else {
+                pcLeftArm.armRoot.position.lerp(new THREE.Vector3(-0.24, 0, 0), 12 * dt);
+            }
+
+            if (state.player.rightPunchAnim > 0) {
+                state.player.rightPunchAnim -= dt;
+                const p = Math.sin((1 - state.player.rightPunchAnim / 0.28) * Math.PI);
+                pcRightArm.armRoot.position.z = -p * 0.45;
+                pcRightArm.armRoot.position.x = state.player.activePunchType === 'hookR' ? (0.24 - p * 0.22) : 0.24;
+                pcRightArm.armRoot.position.y = state.player.activePunchType === 'uppercut' ? (p * 0.22) : 0;
+            } else if (state.player.isBlocking) {
+                pcRightArm.armRoot.position.lerp(new THREE.Vector3(0.11, 0.14, -0.05), 14 * dt);
+            } else {
+                pcRightArm.armRoot.position.lerp(new THREE.Vector3(0.24, 0, 0), 12 * dt);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        updateBicepVisuals();
+
+        renderer.setAnimationLoop(() => {
+            const dt = Math.min(0.05, clock.getDelta());
+            updateLocomotion(dt);
+            updateVRPunchesAndGuard(dt);
+            updatePhysicsAndAnimations(dt);
+            updateOpponentAI(dt);
+            renderer.render(scene, camera);
+        });
+    </script>
+</body>
+</html>
